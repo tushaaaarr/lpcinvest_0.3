@@ -22,6 +22,7 @@ from geopy.geocoders import Nominatim
 from django.contrib import messages
 import time
 from django.contrib import messages 
+import time
 User = get_user_model()
 
 
@@ -80,45 +81,45 @@ def get_discounted_price(property):
        }
        return discount_data
 
-def clean_property_data(property,user_id= None):
-    d = defaultdict(list)
+def units_available(property):
     prop = PropertyFurnitureMapper.objects.filter(property = property)
-    for furniture in prop:
-        furniture.furniture_type = int(furniture.furniture_type)
-        if furniture.furniture_type == 1:
-            d['room'].append(furniture.furniture_counts.furniture_counts)
-        elif furniture.furniture_type == 2:
-            d['bathrooms'].append(furniture.furniture_counts.furniture_counts)
-    
+    rooms = prop.filter(furniture_type=1).values_list("furniture_counts",flat=True)
     units_available = PropertyTypeMapper.objects.filter(property=property).values_list('type__type',flat=True)
     units = " "
     if 'studio' in units_available:
         units += 'Studio, '
     if 'apartment' in units_available:
-        rooms = " & ".join(d['room'])
+        rooms = " & ".join([str(x) for x in rooms])
         if not len(rooms)<1:
             units += f"{rooms} Bed Apartments"
-    
+    return units
+
+def clean_property_data(property,user_id= None):
+    # Properties.objects.select_related().filter(features__feature=1).distinct()
+    ob = Properties.objects.all()
+    for i in ob:
+        print(i.features.feature)
+
+    prop = PropertyFurnitureMapper.objects.filter(property = property)
+    rooms = prop.filter(furniture_type=1).values_list("furniture_counts",flat=True)
+    units = units_available(property)
     is_checked = None
     if user_id is not None:
         if UserFavProperties.objects.filter(property=property).filter(user=user_id).exists():
             is_checked = UserFavProperties.objects.filter(property=property).filter(user=user_id)[0].is_checked
 
     status_ls = PropertyStatusMapper.objects.filter(property = property).values_list('status__status',flat=True)
-    status = None
     if "Completed" in status_ls:
         status = "Completed"
-    elif "Off plan" in status_ls:
+    else:
         status = 'Off plan'
 
     properties_dict = {
         "title":property.title,
         "id":property.id,
         "adddress":property.adddress,
-        'area':property.area,
-        'beds':d['beds'],
-        'room':", ".join(d['room']),
-        'bathrooms':", ".join(d['bathrooms']),
+        'desposit':property.area,
+        'room':", ".join([str(x) for x in rooms]),
         'image':property.image,
         "price":("{:,}".format(property.price)),
         "pub_date":convert_time_ago(property.pub_date),
@@ -129,17 +130,18 @@ def clean_property_data(property,user_id= None):
         'type':units,
     }
     return properties_dict
-
-
     
 def home_page(request):
-    properties = Properties.objects.all()
+    properties = Properties.objects.all()[:5]
     cleaned_properties = []
     for property_ in properties:
         prop = clean_property_data(property_)
         cleaned_properties.append(prop)
+
     team_members = TeamMembers.objects.all()
-    return render(request,'user/index.html',{"properties":cleaned_properties,"team_members":team_members})
+    context = {"properties":cleaned_properties,"team_members":team_members}
+    
+    return render(request,'user/index.html',context)
 
 def updated_index(request):
     
@@ -161,19 +163,6 @@ def get_containing(choices, needle):
     return containing
 
 
-def property_list_by_type(request,in_type):
-    if in_type == 'appartments':
-        in_type = 'apartment'
-    if in_type == 'studios':
-        in_type = 'studio'
-    type_dict = {}
-    type_dict['type_id'] = 'type'
-    type_dict['type_value'] = in_type
-    feature_data = property_listing(request,type_dict)
-    properties = feature_data['properties']
-    return render(request,'user/property/properties-list-leftsidebar.html',{"properties":properties,"properties_data":feature_data})
-
-
 def property_list_by_city(request,in_city):
     type_dict = {}
     type_dict['type_id'] = 'city'
@@ -186,29 +175,21 @@ def property_list_by_city(request,in_city):
     return render(request,'user/property/properties-list-leftsidebar.html',
     {"properties":properties,"properties_data":feature_data,"page_data":page_data})
 
-
 def convert_time_ago(time_date):
     time = time_date.strftime('%H:%M:%S')
     date = time_date
     mixed = str(date) + str(time)
     time_ago = timeago(f"{str(date)} {str(time)}").ago
     return time_ago.split(',')[0]
-    return time_ago
-
 
 def property_listing(request,type_dict=None):
     if type_dict == None:
         properties = Properties.objects.filter(is_underconstruction = False).filter(is_exclusive = False)
 
-    elif type_dict['type_id'] == 'type':
-        properties = Properties.objects.filter(type__in=get_containing(PROP_TYPE_CHOICES,type_dict['type_value'])).filter(is_underconstruction = False).filter(is_exclusive = False)
-
     elif type_dict['type_id'] == 'city':
-        properties = Properties.objects.filter(city__in=get_containing(CITIES_CHOICES,type_dict['type_value'])).filter(is_underconstruction = False).filter(is_exclusive = False)
-
+        properties = Properties.objects.filter(city__in = get_containing(CITIES_CHOICES,type_dict['type_value'])).filter(is_underconstruction = False).filter(is_exclusive = False)
 
     sort_properties = request.GET.get('ordering', "")
-
     sort_properties = request.GET.get('ordering', "") 
     query = {}
     query['status'] = request.GET.getlist('status', "")
@@ -217,12 +198,10 @@ def property_listing(request,type_dict=None):
     query['city'] = request.GET.get('location', "")
     query['bedrooms'] = request.GET.get('bedrooms', "")
     query['bathrooms'] = request.GET.get('bathrooms', "")
-    query['balcony'] = request.GET.get('balcony', "")
-    query['garage'] = request.GET.get('garage', "")
-    query['min_area'] = request.GET.get('min_area', "")
-    query['max_area'] = request.GET.get('max_area', "")
     query['min_price'] = request.GET.get('min_price', "")
     query['max_price'] = request.GET.get('max_price', "")
+    query['max_deposit'] = request.GET.get('max_deposit', "")
+    query['min_deposit'] = request.GET.get('min_deposit', "")
     query['features_list'] = request.GET.get('features_list', "")
     query['features_list'] = [x for x in query['features_list'].split(',')]
 
@@ -239,8 +218,6 @@ def property_listing(request,type_dict=None):
     feature_data['selected_status']  = " ".join(query['status'])
     feature_data['selected_bedrooms']  = query['bedrooms']
     feature_data['selected_bathrooms']  = query['bathrooms']
-    feature_data['selected_garage']  = query['garage']
-    feature_data['selected_balcony']  = query['balcony']
 
     cleaned_properties = []
     for property_ in properties:
@@ -252,14 +229,11 @@ def property_listing(request,type_dict=None):
 
     properties = cleaned_properties
     feature_data['properties'] = properties
-
     try:
         properties_data['properties'] = properties
         feature_data.update(properties_data)
     except:
         pass
-
-        pass    
     
     PRODUCTS_PER_PAGE= 10
     page = request.GET.get('page',1)
@@ -276,17 +250,20 @@ def property_listing(request,type_dict=None):
     if len(properties) < 1:
         page_data['not_found'] = True
 
+
+    context = {"properties":properties,"page_data":page_data,
+        'is_paginated':True, 'paginator':product_paginator,"page_obj":properties}
+
     if type_dict is None:
-        return render(request,'user/property/properties-list-leftsidebar.html',{"properties":properties,"properties_data":feature_data,"page_data":page_data,
-        'is_paginated':True, 'paginator':product_paginator,"page_obj":properties})
+        return render(request,'user/property/properties-list-leftsidebar.html',context)
     
+
     return feature_data
 
 
 def property_listing_map(request):
     return render(request,'user/property/properties_map.html')
 
-import time
 
 def property_view(request,id):
     feature_data = dict()
@@ -298,55 +275,21 @@ def property_view(request,id):
     feature_data['status_list'] = ", ".join(status)
 
     # similar_properties = Properties.objects.filter(city = property.city)[:2]
-    page_data = {'page_name':property.title}
     Calculated_data = MortgageCalculator(property.price) 
     if request.is_ajax(): 
         properties_list = SendPropertiesToMap(request,property)
         return JsonResponse({'data':properties_list}) 
 
-    d = defaultdict(list)
-    prop = PropertyFurnitureMapper.objects.filter(property = property)
-    for furniture in prop:
-        furniture.furniture_type = int(furniture.furniture_type)
-        if furniture.furniture_type == 1:
-            d['room'].append(furniture.furniture_counts.furniture_counts)
-        elif furniture.furniture_type == 2:
-            d['bathrooms'].append(furniture.furniture_counts.furniture_counts)
-        elif furniture.furniture_type == 3:
-            d['garage'].append(furniture.furniture_counts.furniture_counts)
-
-
-    furniture_data = {"room":" & ".join(d['room']),
-                      "bathrooms":" & ".join(d['bathrooms']),
-                       "beds":" & ".join(d['beds'])
-                    }
-
-    similar_properties = Properties.objects.filter(city = property.city)[:2]
-    page_data = {'page_name':property.title}
-    Calculated_data = MortgageCalculator(property.price)
-    # if request.is_ajax():
-    #     properties_list = SendPropertiesToMap(request,property)
-    #     return JsonResponse({'data':properties_list})
-        
-    units_available = PropertyTypeMapper.objects.filter(property=property).values_list('type__type',flat=True)
-    units = " "
-    if 'studio' in units_available:
-        units += 'Studio, '
-    if 'apartment' in units_available:
-        rooms = " & ".join(d['room'])
-        if not len(rooms)<1:
-            units += f"{rooms} Bed Apartments"
-    
-
-    location_coord = json.dumps([{'latitude':property.lat,"longitude":property.lon}])
-    images_gallery = PropertyImage.objects.filter(property = 16)[:3]
+    units = units_available(property)
+    location_coord = json.dumps([{'latitude':property.lat,"longitude":property.lon}])    
     property.price = ("{:,}".format(property.price))
     property.units = units
+    page_data = {'page_name':property.title}
 
+    context = {'property':property,'prop_images':prop_images,"feature_data":feature_data,"Calculated_data":Calculated_data,
+    "page_data":page_data,"location_coord":location_coord}
 
-    return render(request,'user/property/properties-details1.html',{'property':property,'prop_images':prop_images,
-    "feature_data":feature_data,"Calculated_data":Calculated_data,"images_gallery":images_gallery,  
-    "page_data":page_data,"location_coord":location_coord})
+    return render(request,'user/property/properties-details1.html',context)
 
 
 def filter_property(query,properties):
@@ -367,31 +310,26 @@ def filter_property(query,properties):
             properties = properties.filter(id__in = dt_ids)
         except:
             pass
-
+    
+    dt = PropertyStatusMapper.objects.filter(property_id__in = properties_ids)
     if not 'all' in query['status']:
-        dt = PropertyStatusMapper.objects.filter(property_id__in = properties_ids)
         status_id = StatusMaster.objects.filter(status__in=query['status'])
         dt = dt.filter(status__in=status_id)
         dt_ids = list(dt.values_list('property', flat=True))
         properties = properties.filter(id__in = dt_ids)
 
+    if not 'all' in query['type'].strip():
+        if query['type'] == "buy_to_let":
+            type_id = StatusMaster.objects.filter(status__startswith="Buy to let")
+        elif query['type'] == "buy_to_live":
+            type_id = StatusMaster.objects.filter(status__startswith="Buy to live")
+        else:
+            type_id = StatusMaster.objects.all()
+        dt = dt.filter(status__in=type_id)
+        dt_ids = list(dt.values_list('property', flat=True))
+        properties = properties.filter(id__in = dt_ids)
 
-    dt = PropertyFurnitureMapper.objects.all()
-    if query['garage'] != 'Garage':
-        dt1,dt2,dt3 = [],[],[]
-        dt1 = dt.filter(furniture_type__in=get_containing(FURNITURE_TYPE_CHOICES,"garage")).filter(
-            furniture_counts=int(query['garage']))
-        dt1 = list(dt1.values_list('property', flat=True))
-        properties = properties.filter(id__in = dt1)
-
-
-    if query['bedrooms'] != 'Bedrooms':
-        dt2 = dt.filter(furniture_type__in=get_containing(FURNITURE_TYPE_CHOICES,"room")).filter(
-            furniture_counts=int(query['bedrooms']))
-        dt2 = list(dt2.values_list('property', flat=True))
-        properties = properties.filter(id__in = dt2)
     dt = PropertyFurnitureMapper.objects.filter(property_id__in = properties_ids)
-
     if query['bedrooms'] != 'Bedrooms': 
         if query['bedrooms'] == 'studio':
             type_dt = PropertyTypeMapper.objects.filter(type__type ='studio').filter(property_id__in = properties_ids)
@@ -409,28 +347,16 @@ def filter_property(query,properties):
         dt3 = list(dt3.values_list('property', flat=True))
         properties = properties.filter(id__in = dt3)
 
-
+    
     properties = properties.filter(city__in=get_containing(CITIES_CHOICES,query["city"])).filter(
         price__range=(int(query['min_price']),int(query['max_price']))).filter(
-        type__in = get_containing(PROP_TYPE_CHOICES,query['type'])
-        )
-
-    properties = properties.filter(city__in=get_containing(CITIES_CHOICES,query["city"])).filter(
-        price__range=(int(query['min_price']),int(query['max_price'])))     
-
-    #  .filter(
-    #     area__range=(int(query['min_area']),int(query['max_area']))).
+        deposited_price__range=(query["min_deposit"],query['max_deposit']))
 
     return properties
 
 
 def property_sorting(query,properties):
     properties_data = {}
-    properties_data['is_price_low_high'] = ''
-    properties_data['is_price_high_low'] = ''
-    properties_data['is_latest_property'] = ''
-    properties_data['is_oldest_property'] = ''
-
     if query:
         if query == "price_low_high":
             properties = properties.order_by('price')
@@ -457,7 +383,6 @@ def search(request):
         query = request.GET.get('term', '')
         search_title = Properties.objects.filter(title__icontains=query.lower())
         search_type= Properties.objects.filter(type__in = get_containing(PROP_TYPE_CHOICES,query.lower()))
-
         results = []
         for type_name in (search_type):
             if type_name.get_type_display() not in results:
@@ -498,7 +423,8 @@ def search(request):
             fav_properties.append(clean_property_data(prop))
             properties = fav_properties
 
-    return render(request,'user/property/properties-list-leftsidebar.html',{"properties":properties,"properties_data":properties_data})
+    context = {"properties":properties,"properties_data":properties_data}
+    return render(request,'user/property/properties-list-leftsidebar.html',context)
 
 
 def send_mail():
@@ -547,7 +473,6 @@ def MortgageCalculator(amount):
     #     pass
     # else:
     #     pass
-
     data = {}
     principal = amount
     calculatedInterest = 3 / 100 / 12
@@ -582,7 +507,6 @@ def get_favorite_properties(request):
     if request.is_ajax():
         query = request.POST.get('fav_properties', '')
         query = json.loads(query)[0]
-
         property_id = Properties.objects.get(id=int(query['property_id']))
         if UserFavProperties.objects.filter(property=property_id,user= request.user).exists():
             UserFavProperties.objects.filter(property=property_id,user= request.user).update(is_checked=query['status'])
@@ -615,33 +539,8 @@ def team_meber_view(request,name,id):
     return render(request,'user/team_member_view.html',{'team_member':team_member})
 
 def CityGuide(request,city=None):
-    properties_list = []
     properties = Properties.objects.all()
-    for property in properties:
-        d = defaultdict(list)
-        prop = PropertyFurnitureMapper.objects.filter(property = property)
-        for furniture in prop:
-            furniture.furniture_type = int(furniture.furniture_type)
-            if furniture.furniture_type == 1:
-                d['room'].append(furniture.furniture_counts.furniture_counts)
-            elif furniture.furniture_type == 2:
-                d['bathrooms'].append(furniture.furniture_counts.furniture_counts)
-            elif furniture.furniture_type == 3:
-                d['garage'].append(furniture.furniture_counts.furniture_counts)
-
-        properties_dict = {
-            "title":property.title,
-            "id":property.id,
-            "adddress":property.adddress,
-            'area':property.area,
-            'beds':d['beds'],
-            'room':",".join(d['room']),
-            'bathrooms':",".join(d['bathrooms']),
-            'image':property.image,
-            "price":property.price
-        }
-        properties_list.append(properties_dict)
-    return render(request,'user/city_guide.html',{"properties":properties_list})
+    return render(request,'user/city_guide.html',{"properties":properties})
 
 def contact(request):
     return render(request,'user/contact.html')
@@ -678,7 +577,6 @@ def login(request,is_new_registered=False):
 def logout(request):
     django_logout(request)
     return redirect('/login')
-
 
 def register(request):
     page_data = {}
@@ -877,7 +775,10 @@ def blog(request):
     return render(request,'user/blog.html')
 
 def readblog(request,id):
-    return render(request,'user/readblog.html')    
+    blog_content = Blogs.objects.filter(id=id)[0]
+    return render(request,'user/readblog.html',
+    {'blog_content':blog_content}
+    )    
 
 def partners(request):
     return render(request,'user/partners.html')

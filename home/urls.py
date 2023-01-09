@@ -13,7 +13,6 @@ urlpatterns = [
     path('all-properties',views.property_listing,name='properties'),
     path('properties-map',views.property_listing_map,name='property_listing_map'),
     path('city/<str:in_city>',views.property_list_by_city,name='property_list_by_city'),
-    path('property-type/<str:in_type>/',views.property_list_by_type,name='property-type'),
 
     path('properties/<str:id>',views.property_view,name='property_view'),
     path('send-property-form',views.property_form,name='property_form'),
@@ -60,7 +59,6 @@ urlpatterns = [
     # calulators
     path('stamp-duty-calculator',views.stamp_duty_calculator,name='stamp_duty_calculator'),
     path('mortgage-calculator',views.mortgage_calculator,name='mortgage_calculator'),
-
 
     path('updated-index',views.updated_index,name='updated_index'),
 

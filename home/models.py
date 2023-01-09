@@ -15,7 +15,8 @@ class CustomUser(AbstractUser):
 
 PROP_TYPE_CHOICES =(
     ("1", "studio"),
-    ("2", "apartment"),)
+    ("2", "apartment"),
+    )
 
 FURNITURE_TYPE_CHOICES =(
     ("1", "room"),
@@ -35,6 +36,9 @@ CITIES_CHOICES = (
     ("6", "london"),
     ("7", "sheffield"),
     ("8","bradford"),
+    ("9","preston"),
+    ("10","nottingham")
+
     )
 
 
@@ -54,7 +58,7 @@ class Properties(models.Model):
     price = models.IntegerField(default=0)
     yields = models.CharField(blank=True,max_length=40)
     area = models.CharField(blank=True,max_length=40)
-
+    deposited_price = models.IntegerField(blank=True,default=0)
     # Location
     adddress = models.CharField(max_length=50)
     city = models.CharField(max_length=20,choices = CITIES_CHOICES)
@@ -88,7 +92,10 @@ class Properties(models.Model):
         except:
             self.lat = self.lat
             self.lon = self.lon
-
+        try:
+            self.deposited_price = int(self.area) / 100 * self.price
+        except:
+            pass
         return super(Properties, self).save(*args, **kwargs)
 
 
@@ -114,7 +121,7 @@ class PropertyTypeMapper(models.Model):
 
 
 class PropertyFeatureMapper(models.Model):
-    property = models.ForeignKey(Properties, default=None, on_delete=models.CASCADE)
+    property = models.ForeignKey(Properties, default=None, on_delete=models.CASCADE,related_name='features')
     feature = models.ForeignKey(FeatureMaster, default=None, on_delete=models.CASCADE)
     def __str__(self):
         return str(self.property.title)
@@ -285,3 +292,21 @@ class TeamMembers(models.Model):
     def save(self, *args, **kwargs):
         self.name = self.name.capitalize()
         return super(TeamMembers, self).save(*args, **kwargs)
+    
+    
+    
+
+class Blogs(models.Model):
+    title = HTMLField()
+    content = HTMLField()
+    desc = models.TextField(default="")
+    city = models.CharField(max_length=20,choices = CITIES_CHOICES)
+    image_1 = models.FileField(upload_to = 'media/blogs')
+    image_2 = models.FileField(upload_to = 'media/blogs')
+    pub_date = models.DateField(default=datetime.now())
+    def __str__(self):
+        return self.title
+    def save(self, *args, **kwargs):
+        self.name = self.title.capitalize()
+        return super(Blogs, self).save(*args, **kwargs)
+    

@@ -224,7 +224,7 @@
                                     data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Properties</a>
                                 <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
                                     {%for city in common_properties_data.cities%}
-                                    <li><a class="dropdown-item" href="/city/birmingham">{{city | title}}</a></li>
+                                    <li><a class="dropdown-item" href="/city/{{city}}">{{city | title}}</a></li>
                                     {%endfor%}
                                 </ul>
                             </li>
@@ -238,8 +238,6 @@
                                 {%for city in common_properties_data.cities%}
                                 <li><a class="dropdown-item" href="/city-guide/{{city}}">{{city | title}}</a></li>
                                 {%endfor%}
-
-
                             </ul>
                         </li>
                         </li>
@@ -500,28 +498,11 @@
                         <h4>City Guide</h4>
                         <div class="s-border"></div>
                         <ul class="links">
+                            {%for city in common_properties_data.cities%}
                             <li>
-                                <a href="/city-guide/birmingham"><i class="fa fa-angle-right"></i>Ashford</a>
+                                <a href="/city-guide/{{city}}"><i class="fa fa-angle-right"></i>{{city | title}}</a>
                             </li>
-                            <li>
-                                <a href="/city-guide/birmingham"><i class="fa fa-angle-right"></i> Birmingham</a>
-                            </li>
-                            <li>
-                                <a href="/city-guide/birmingham"><i class="fa fa-angle-right"></i>Bradford</a>
-                            </li>
-
-                            <li>
-                                <a href="/city-guide/birmingham"><i class="fa fa-angle-right"></i> Leeds</a>
-                            </li>
-                            <li>
-                                <a href="/city-guide/birmingham"><i class="fa fa-angle-right"></i>Liverpool</a>
-                            </li>
-                            <li>
-                                <a href="/city-guide/birmingham"><i class="fa fa-angle-right"></i>London</a>
-                            </li>
-                            <li>
-                                <a href="/city-guide/birmingham"><i class="fa fa-angle-right"></i>Manchester</a>
-                            </li>
+                            {%endfor%}
                         </ul>
                     </div>
                 </div>
